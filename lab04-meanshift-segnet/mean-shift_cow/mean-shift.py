@@ -11,23 +11,59 @@ import numpy as np
 from skimage import io, color
 from skimage.transform import rescale
 
-
+# TO CORRECT THE PATH
+from pathlib import Path
+data_dir = Path(__file__).resolve().parent
 
 
 def distance(x, X):
-    raise NotImplementedError('distance function not implemented!')
+    # X shape (H*W, 3)
+    dist = []
+    # iterate over all poits
+    for point in X:
+        norm = torch.linalg.norm(point - x)
+        dist.append(norm)
+    dist = np.array(dist)
+    return dist
 
-def distance_batch(x, X):
-    raise NotImplementedError('distance_batch function not implemented!')
+
+
+def distance_batch(X, Y):
+    # X: (N, D) -> (N, 1, D)
+    # Y: (M, D) -> (1, M, D)
+    diff = X[:, None, :] - Y[None, :, :]
+    dist = np.linalg.norm(diff, axis=2) # across D
+    return dist
+
+
 
 def gaussian(dist, bandwidth):
-    raise NotImplementedError('gaussian function not implemented!')
+    # gaussian kernel, only the non-const part
+    weight = np.exp(-1/(2*bandwidth**2) * (dist**2))
+    return weight
+
+
 
 def update_point(weight, X):
-    raise NotImplementedError('update_point function not implemented!')
+    weight = torch.as_tensor(weight, dtype=X.dtype)
+    num = torch.zeros_like(X[0])
+    den = weight.sum()
+    for i in range(X.shape[0]):
+        num += weight[i] * X[i]
+    return num / den
+    
+    
 
 def update_point_batch(weight, X):
-    raise NotImplementedError('update_point_batch function not implemented!')
+    weight = torch.as_tensor(weight, dtype=X.dtype)
+    num = torch.sum((weight[:, :, None]) * X[None, :, :], dim=1)
+    den = torch.sum(weight, axis=1)[:, None]
+
+    updated_points =  num / den
+    
+    return updated_points
+
+
 
 def meanshift_step(X, bandwidth=2.5):
     X_ = X.clone()
@@ -37,14 +73,21 @@ def meanshift_step(X, bandwidth=2.5):
         X_[i] = update_point(weight, X)
     return X_
 
+
+
 def meanshift_step_batch(X, bandwidth=2.5):
-    raise NotImplementedError('meanshift_step_batch function not implemented!')
+    X_ = X.clone()
+    dist = distance_batch(X, X)
+    weight = gaussian(dist, bandwidth)
+    X_ = update_point_batch(weight, X)
+    return X_
+
 
 def meanshift(X):
     X = X.clone()
     for _ in range(20):
-        X = meanshift_step(X)   # slow implementation
-        # X = meanshift_step_batch(X)   # fast implementation
+        #X = meanshift_step(X)   # slow implementation
+        X = meanshift_step_batch(X)   # fast implementation
     return X
 
 
@@ -52,7 +95,7 @@ def meanshift(X):
 scale = 0.25    # downscale the image to run faster
 
 # Load image and convert it to CIELAB space
-image = rescale(io.imread('cow.jpg'), scale, channel_axis=-1)
+image = rescale(io.imread(data_dir / 'cow.jpg'), scale, channel_axis=-1) # HAD TO CHANGE TO LOAD IMAGE RIGHT
 image_lab = color.rgb2lab(image)
 shape = image_lab.shape # record image shape
 image_lab = image_lab.reshape([-1, 3])  # flatten the image
@@ -65,7 +108,7 @@ t = time.time() - t
 print ('Elapsed time for mean-shift: {}'.format(t))
 
 # Load label colors and draw labels as an image
-colors = np.load('colors.npz')['colors']
+colors = np.load(data_dir / 'colors.npz')['colors'] # HAD TO CHANGE FOR RIGHT PATH
 colors[colors > 1.0] = 1
 colors[colors < 0.0] = 0
 
@@ -74,4 +117,4 @@ centroids, labels = np.unique((X / 4).round(), return_inverse=True, axis=0)
 result_image = colors[labels].reshape(shape)
 result_image = rescale(result_image, 1 / scale, order=0, channel_axis=-1)     # resize result image to original resolution
 result_image = (result_image * 255).astype(np.uint8)
-io.imsave('result.png', result_image)
+io.imsave(data_dir / 'result.png', result_image) # HAD TO CHANGE FOR RIGHT PATH
