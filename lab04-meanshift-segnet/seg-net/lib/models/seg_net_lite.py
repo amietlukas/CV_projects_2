@@ -49,7 +49,7 @@ class SegNetLite(nn.Module):
             layers_conv_down.append(nn.Conv2d(input_size, down_filter_sizes[i], kernel_size=kernel_sizes[i], padding=conv_paddings[i]))
             layers_bn_down.append(nn.BatchNorm2d(down_filter_sizes[i]))
             layers_pooling.append(nn.MaxPool2d(pooling_kernel_sizes[i], pooling_strides[i], return_indices=True)) # return_indices needed for upsampling
-            # adapt imput size for next block
+            # adapt input size for next block
             input_size = down_filter_sizes[i]
 
         # Convert Python list to nn.ModuleList, so that PyTorch's autograd
@@ -57,6 +57,7 @@ class SegNetLite(nn.Module):
         self.layers_conv_down = nn.ModuleList(layers_conv_down)
         self.layers_bn_down = nn.ModuleList(layers_bn_down)
         self.layers_pooling = nn.ModuleList(layers_pooling)
+
 
 
         ################# DECODER #################

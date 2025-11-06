@@ -23,7 +23,7 @@ def distance(x, X):
     for point in X:
         norm = torch.linalg.norm(point - x)
         dist.append(norm)
-    dist = np.array(dist)
+    dist = torch.stack(dist) # convert list to tensor
     return dist
 
 
@@ -32,14 +32,14 @@ def distance_batch(X, Y):
     # X: (N, D) -> (N, 1, D)
     # Y: (M, D) -> (1, M, D)
     diff = X[:, None, :] - Y[None, :, :]
-    dist = np.linalg.norm(diff, axis=2) # across D
+    dist = torch.linalg.norm(diff, dim=2) # across D
     return dist
 
 
 
 def gaussian(dist, bandwidth):
     # gaussian kernel, only the non-const part
-    weight = np.exp(-1/(2*bandwidth**2) * (dist**2))
+    weight = torch.exp(-1/(2*bandwidth**2) * (dist**2))
     return weight
 
 
@@ -86,8 +86,8 @@ def meanshift_step_batch(X, bandwidth=2.5):
 def meanshift(X):
     X = X.clone()
     for _ in range(20):
-        #X = meanshift_step(X)   # slow implementation
-        X = meanshift_step_batch(X)   # fast implementation
+        X = meanshift_step(X)   # slow implementation =======> ca 1094.31s
+        #X = meanshift_step_batch(X)   # fast implementation =======> ca 1.11s
     return X
 
 

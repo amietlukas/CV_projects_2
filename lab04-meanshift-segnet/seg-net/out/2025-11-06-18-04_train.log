@@ -1,0 +1,3 @@
+2025-11-06 18:04:02,416 Namespace(out_dir='out', frequent=10, eval_interval=1, gpu=False, num_workers=4)
+2025-11-06 18:04:02,962 => load 200 samples
+2025-11-06 18:04:02,962 => load 200 samples
