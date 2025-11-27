@@ -124,10 +124,72 @@ class RaftPointTracker:
         #    track its position through the video frames. (30/40pts)
         #  - Return the estimated trajectories of all points over all frames.
 
-        trajectories = ...
+        ## compute forward optical flow between consecutive frames
+        flows_forward = []
+        flows_forward_list = []
+        rgbs = rgbs.float() / 255.0  # normalize
+
+        for t in range(T-1): # iterate over frame pairs
+            
+            img1 = rgbs[t:t+1] # (1, 3, H, W); indexing with ":" keeps the dimension
+            img2 = rgbs[t+1:t+2] # (1, 3, H, W)
+
+            # call RAFT model
+            flow_raft_raw = self.model(img1, img2) # (1, 2, H, W)
+            flow = flow_raft_raw.squeeze(0) # (2, H, W)
+            flows_forward_list.append(flow)
+
+        flows_forward = torch.stack(flows_forward_list, dim=0) # (T-1, 2, H, W)
+
+        ## track each querry point using the computed flows
+        trajectories = torch.zeros((T, N, 2), dtype=torch.float32) # (T, N, 2)
+        
+        for n in range (N): # iterate over tracks
+
+            # initial time and position
+            t0 = int(query_points[n, 0].item())
+            x, y = query_points[n, 1:3].float()
+            trajectories[t0, n, 0] = x
+            trajectories[t0, n, 1] = y
+
+            for t in range(t0, T-1): # iterate over frames
+                flow_t = flows_forward[t] # (2, H, W) vectorfield to go from frame t to t+1
+
+                # bilinear sampling of flow at (x, y)
+                # clamp inside image
+                x_clamped = x.clamp(0, W-1 - 1e-4)
+                y_clamped = y.clamp(0, H-1 - 1e-4)
+                # round down
+                x0 = x_clamped.floor().long()
+                y0 = y_clamped.floor().long()
+
+                fx = x_clamped - x0.float()
+                fy = y_clamped - y0.float()
+
+                # neighbors, named to match standard bilinear formula
+                f00 = flow_t[:, y0, x0]  # top-left
+                f10 = flow_t[:, y0, x0+1]  # top-right
+                f01 = flow_t[:, y0+1, x0]  # bottom-left
+                f11 = flow_t[:, y0+1, x0+1]  # bottom-right
+
+                flow_xy = (
+                    f00 * (1 - fx) * (1 - fy) +
+                    f10 * fx       * (1 - fy) +
+                    f01 * (1 - fx) * fy       +
+                    f11 * fx       * fy
+                )  # (2,)
+
+                dx, dy = flow_xy[0], flow_xy[1]
+
+                # update position
+                x = x + dx
+                y = y + dy
+
+                # store in trajectory
+                trajectories[t + 1, n, 0] = x
+                trajectories[t + 1, n, 1] = y
 
         assert trajectories.shape == (T, N, 2)
-
         return trajectories, None
 
 
