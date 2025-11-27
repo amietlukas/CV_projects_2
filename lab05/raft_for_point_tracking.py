@@ -127,16 +127,16 @@ class RaftPointTracker:
         ## compute forward optical flow between consecutive frames
         flows_forward = []
         flows_forward_list = []
-        rgbs = rgbs.float() / 255.0  # normalize
+        rgbs = rgbs.float()
 
         for t in range(T-1): # iterate over frame pairs
             
-            img1 = rgbs[t:t+1] # (1, 3, H, W); indexing with ":" keeps the dimension
+            img1 = rgbs[t:t+1] # (1, 3, H, W); indexing with ":" keeps the first dimension
             img2 = rgbs[t+1:t+2] # (1, 3, H, W)
 
             # call RAFT model
-            flow_raft_raw = self.model(img1, img2) # (1, 2, H, W)
-            flow = flow_raft_raw.squeeze(0) # (2, H, W)
+            flow_up, _ = self.model(img1, img2)  # (1, 2, H, W); RAFT predicted full-resolution optical flow field
+            flow = flow_up.squeeze(0)            # (2, H, W)
             flows_forward_list.append(flow)
 
         flows_forward = torch.stack(flows_forward_list, dim=0) # (T-1, 2, H, W)
@@ -162,15 +162,16 @@ class RaftPointTracker:
                 # round down
                 x0 = x_clamped.floor().long()
                 y0 = y_clamped.floor().long()
-
                 fx = x_clamped - x0.float()
                 fy = y_clamped - y0.float()
+                x1 = (x0 + 1).clamp(max=W-1)
+                y1 = (y0 + 1).clamp(max=H-1)
 
-                # neighbors, named to match standard bilinear formula
+                # neighbors
                 f00 = flow_t[:, y0, x0]  # top-left
-                f10 = flow_t[:, y0, x0+1]  # top-right
-                f01 = flow_t[:, y0+1, x0]  # bottom-left
-                f11 = flow_t[:, y0+1, x0+1]  # bottom-right
+                f10 = flow_t[:, y0, x1]  # top-right
+                f01 = flow_t[:, y1, x0]  # bottom-left
+                f11 = flow_t[:, y1, x1]  # bottom-right
 
                 flow_xy = (
                     f00 * (1 - fx) * (1 - fy) +
@@ -186,8 +187,8 @@ class RaftPointTracker:
                 y = y + dy
 
                 # store in trajectory
-                trajectories[t + 1, n, 0] = x
-                trajectories[t + 1, n, 1] = y
+                trajectories[t+1, n, 0] = x.clamp(0, W-1)
+                trajectories[t+1, n, 1] = y.clamp(0, H-1)
 
         assert trajectories.shape == (T, N, 2)
         return trajectories, None
